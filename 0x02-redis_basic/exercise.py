@@ -1,17 +1,30 @@
 #!/usr/bin/env python3
 """ Defines a class Cache """
-from typing import Union, Callable
+from functools import wraps
+from typing import Union, Callable, Any
 import redis
 import uuid
+
+
+def count_calls(method: Callable) -> Callable:
+    """ Counts how many times methods of the Cache class are called """
+    @wraps(method)
+    def count(self, *args, **kwargs) -> Any:
+        """ Increments each time a cache method is called """
+        if isinstance(self._redis, redis.Redis):
+            self._redis.incr(method.__qualname__)
+        return method(self, *args, *kwargs)
+    return count
 
 
 class Cache:
     """ Creates a redis cache """
     def __init__(self):
         """ Initializes a redis instance """
-        self.__redis = redis.Redis()
-        self.__redis.flushdb()
+        self._redis = redis.Redis()
+        self._redis.flushdb()
 
+    @count_calls
     def store(self, data: Union[str, bytes, int, float]) -> str:
         """ Generates a random uuid key and stores 'data' in Redis
             using the random key as the key
@@ -20,18 +33,18 @@ class Cache:
             The generated uuid string
         """
         key = str(uuid.uuid4())
-        self.__redis.set(key, data)
+        self._redis.set(key, data)
         return key
 
     def get(self, key: str, fn: Callable = None) -> Union[
             str, bytes, int, float]:
         """ Returns the value associated with 'key' in its original data-type
         """
-        if self.__redis.exists(key):
+        if self._redis.exists(key):
             if fn is not None:
-                return fn(self.__redis.get(key))
+                return fn(self._redis.get(key))
             else:
-                return self.__redis.get(key)
+                return self._redis.get(key)
 
     def get_str(self, key: str) -> str:
         """ Converts a byte data type returned by the 'get' method

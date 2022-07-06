@@ -17,6 +17,22 @@ def count_calls(method: Callable) -> Callable:
     return count
 
 
+def call_history(method: Callable) -> Callable:
+    """ Stores the history of inputs and outputs for a particular function """
+    @wraps(method)
+    def history(self, *args, **kwargs) -> Any:
+        """ Returns a method """
+        inputs = "{}:inputs".format(method.__qualname__)
+        outputs = "{}:outputs".format(method.__qualname__)
+        if isinstance(self._redis, redis.Redis):
+            self._redis.rpush(inputs, str(args))
+        out = method(self, *args, **kwargs)
+        if isinstance(self._redis, redis.Redis):
+            self._redis.rpush(outputs, out)
+        return out
+    return history
+
+
 class Cache:
     """ Creates a redis cache """
     def __init__(self):
@@ -24,6 +40,7 @@ class Cache:
         self._redis = redis.Redis()
         self._redis.flushdb()
 
+    @call_history
     @count_calls
     def store(self, data: Union[str, bytes, int, float]) -> str:
         """ Generates a random uuid key and stores 'data' in Redis
